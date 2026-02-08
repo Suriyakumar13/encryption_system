@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6x6 Chaos-Pell Image Guard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root { --bg: #0f172a; --panel: #1e293b; --accent: #22c55e; --warn: #f59e0b; --text: #e2e8f0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
+        .container { display: flex; gap: 30px; background: var(--panel); padding: 30px; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-width: 1100px; flex-wrap: wrap; justify-content: center; }
+        .canvas-area { text-align: center; }
+        canvas { background: #020617; border-radius: 12px; cursor: crosshair; touch-action: none; border: 2px solid #334155; }
+        .controls { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 320px; }
+        h2 { margin-top: 0; color: var(--accent); letter-spacing: 1px; }
+        label { font-weight: bold; font-size: 14px; color: #94a3b8; text-transform: uppercase; }
+        #hashDisplay { font-family: 'Courier New', monospace; font-size: 12px; background: #020617; padding: 12px; border-radius: 8px; word-break: break-all; color: var(--accent); min-height: 40px; border: 1px solid #334155; }
+        button { padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; transition: all 0.3s ease; text-transform: uppercase; }
+        .btn-encrypt { background: #b91c1c; color: white; }
+        .btn-decrypt { background: #15803d; color: white; }
+        .btn-reset { background: #475569; color: white; }
+        button:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
+        button:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        input[type="file"] { background: #020617; padding: 10px; border-radius: 8px; border: 1px solid #334155; color: #94a3b8; }
+        .status-box { padding: 10px; border-radius: 6px; font-size: 13px; background: rgba(0,0,0,0.2); border-left: 4px solid var(--warn); }
+    </style>
+</head>
+<body>
+
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="margin: 0; color: white;">Image Guard <span style="color: var(--accent)">6x6</span></h1>
+        <p style="color: #94a3b8;">High-Entropy Chaos Encryption System</p>
+    </div>
+    
+    <div class="container">
+        <div class="canvas-area">
+            <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <label>Security Pattern</label>
+                <span id="nodeCounter" style="font-size: 12px; color: var(--warn);">Nodes: 0 / 36</span>
+            </div>
+            <canvas id="patternCanvas" width="360" height="360"></canvas>
+            <div style="margin-top: 15px;">
+                <button class="btn-reset" onclick="resetPattern()">Clear Grid</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label>1. Input Source</label>
+            <input type="file" id="imageInput" accept="image/*">
+            
+            <label>2. Derived Key Hash</label>
+            <div id="hashDisplay">Complete the 36-node path to unlock...</div>
+
+            <label>3. Cryptographic Actions</label>
+            <button id="encBtn" class="btn-encrypt" onclick="processImage(false)" disabled>Encrypt & Export</button>
+            <button id="decBtn" class="btn-decrypt" onclick="processImage(true)" disabled>Decrypt & Export</button>
+            
+            <div class="status-box" id="statusLabel">
+                System Status: Awaiting full pattern sequence.
+            </div>
+        </div>
+    </div>
+
+    <canvas id="hiddenCanvas" style="display:none;"></canvas>
+
+<script>
+    const canvas = document.getElementById('patternCanvas');
+    const ctx = canvas.getContext('2d');
+    const nodeCountLabel = document.getElementById('nodeCounter');
+    const gridSize = 6;
+    const totalNodes = gridSize * gridSize; // 36
+    const spacing = 60;
+    const nodes = [];
+    let pattern = [];
+    let isDrawing = false;
+    let currentHash = "";
+
+    // Generate 6x6 node coordinates
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            nodes.push({ x: 30 + c * spacing, y: 30 + r * spacing, idx: r * gridSize + c });
+        }
+    }
+
+    function drawGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Lines connecting nodes
+        if (pattern.length > 1) {
+            ctx.beginPath();
+            ctx.strokeStyle = pattern.length === totalNodes ? '#22c55e' : '#f59e0b';
+            ctx.lineWidth = 5;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.moveTo(nodes[pattern[0]].x, nodes[pattern[0]].y);
+            for (let i = 1; i < pattern.length; i++) {
+                ctx.lineTo(nodes[pattern[i]].x, nodes[pattern[i]].y);
+            }
+            ctx.stroke();
+        }
+
+        // Draw individual nodes
+        nodes.forEach(n => {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, 10, 0, Math.PI * 2);
+            if (pattern.includes(n.idx)) {
+                ctx.fillStyle = pattern.length === totalNodes ? '#22c55e' : '#f59e0b';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = ctx.fillStyle;
+            } else {
+                ctx.fillStyle = '#334155';
+                ctx.shadowBlur = 0;
+            }
+            ctx.fill();
+            ctx.closePath();
+        });
+        nodeCountLabel.innerText = `Nodes: ${pattern.length} / ${totalNodes}`;
+        if(pattern.length === totalNodes) nodeCountLabel.style.color = 'var(--accent)';
+        else nodeCountLabel.style.color = 'var(--warn)';
+    }
+    drawGrid();
+
+    const startDrawing = (e) => { 
+        pattern = []; 
+        isDrawing = true; 
+        toggleButtons(false);
+        handleMove(e); 
+    };
+
+    const handleMove = (e) => {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        nodes.forEach(n => {
+            const dist = Math.hypot(n.x - x, n.y - y);
+            if (dist < 22 && !pattern.includes(n.idx)) {
+                pattern.push(n.idx);
+                drawGrid();
+            }
+        });
+    };
+
+    const endDrawing = () => {
+        isDrawing = false;
+        if (pattern.length < totalNodes && pattern.length > 0) {
+            document.getElementById('statusLabel').innerText = `Error: Path incomplete (${pattern.length}/36).`;
+            resetPattern();
+        } else if (pattern.length === totalNodes) {
+            currentHash = CryptoJS.SHA256(pattern.join('-')).toString();
+            document.getElementById('hashDisplay').innerText = currentHash;
+            document.getElementById('statusLabel').innerText = "Path Validated. Security Key active.";
+            toggleButtons(true);
+        }
+    };
+
+    function toggleButtons(enabled) {
+        document.getElementById('encBtn').disabled = !enabled;
+        document.getElementById('decBtn').disabled = !enabled;
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', endDrawing);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); });
+    canvas.addEventListener('touchend', endDrawing);
+
+    function resetPattern() {
+        pattern = [];
+        currentHash = "";
+        document.getElementById('hashDisplay').innerText = "Complete the 36-node path to unlock...";
+        toggleButtons(false);
+        drawGrid();
+    }
+
+    // ================= CRYPTO ENGINE =================
+
+    async function processImage(isDecrypt) {
+        const fileInput = document.getElementById('imageInput');
+        if (!fileInput.files[0]) return alert("Select an image first!");
+
+        document.getElementById('statusLabel').innerText = "Processing chaotic maps...";
+        
+        const img = new Image();
+        img.src = URL.createObjectURL(fileInput.files[0]);
+        await img.decode();
+
+        const hCanvas = document.getElementById('hiddenCanvas');
+        const hCtx = hCanvas.getContext('2d');
+        const w = img.width - (img.width % 4);
+        const h = img.height - (img.height % 4);
+        hCanvas.width = w;
+        hCanvas.height = h;
+        hCtx.drawImage(img, 0, 0, w, h);
+
+        const imageData = hCtx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+
+        // Map Hash to PWLCM Chaos Parameters
+        const h1 = parseInt(currentHash.substring(0, 16), 16) / Math.pow(16, 16);
+        const h2 = parseInt(currentHash.substring(16, 32), 16) / Math.pow(16, 16);
+        const x0 = 0.1 + (h1 * 0.8);
+        const p = 0.1 + (h2 * 0.35);
+
+        // Keystream Generation
+        const ks = new Uint8Array(w * h);
+        let x = x0;
+        for (let i = 0; i < w * h; i++) {
+            if (x < p) x = x / p;
+            else if (x < 0.5) x = (x - p) / (0.5 - p);
+            else if (x < 1 - p) x = (1 - p - x) / (0.5 - p);
+            else x = (1 - x) / p;
+            ks[i] = Math.floor((x * 1e10) % 256);
+        }
+
+        if (!isDecrypt) {
+            pellTransform(data, w, h, 4, false);
+            xorDiffusion(data, ks, w, h, false);
+        } else {
+            xorDiffusion(data, ks, w, h, true);
+            pellTransform(data, w, h, 4, true);
+        }
+
+        hCtx.putImageData(imageData, 0, 0);
+        const link = document.createElement('a');
+        link.download = isDecrypt ? 'Decrypted_Guard.png' : 'Encrypted_Guard.png';
+        link.href = hCanvas.toDataURL();
+        link.click();
+        document.getElementById('statusLabel').innerText = "Operation Successful.";
+    }
+
+    function pellTransform(data, w, h, s, inverse) {
+        const bh = h / s, bw = w / s;
+        const copy = new Uint8ClampedArray(data);
+        for (let i = 0; i < bh; i++) {
+            for (let j = 0; j < bw; j++) {
+                let ni, nj;
+                if (!inverse) {
+                    ni = (2 * i + j) % bh;
+                    nj = i % bw;
+                } else {
+                    ni = nj = j; 
+                    nj = (i - 2 * j);
+                    while(nj < 0) nj += bh;
+                    nj %= bh;
+                }
+                for (let bi = 0; bi < s; bi++) {
+                    for (let bj = 0; bj < s; bj++) {
+                        const src = ((i * s + bi) * w + (j * s + bj)) * 4;
+                        const dst = ((ni * s + bi) * w + (nj * s + bj)) * 4;
+                        for (let c = 0; c < 3; c++) data[dst + c] = copy[src + c];
+                    }
+                }
+            }
+        }
+    }
+
+    function xorDiffusion(data, ks, w, h, decrypt) {
+        if (!decrypt) {
+            for (let i = 0; i < w * h; i++) {
+                for (let c = 0; c < 3; c++) {
+                    let prev = (i === 0) ? 127 : data[(i - 1) * 4 + c];
+                    data[i * 4 + c] = data[i * 4 + c] ^ ks[i] ^ prev;
+                }
+            }
+        } else {
+            const copy = new Uint8ClampedArray(data);
+            for (let i = w * h - 1; i >= 0; i--) {
+                for (let c = 0; c < 3; c++) {
+                    let prev = (i === 0) ? 127 : copy[(i - 1) * 4 + c];
+                    data[i * 4 + c] = copy[i * 4 + c] ^ ks[i] ^ prev;
+                }
+            }
+        }
+    }
+</script>
+</body>
+</html>
